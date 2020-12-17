@@ -3,6 +3,7 @@ import random
 
 rules_menu = {'1': "4", '2': "4a", '3': "5a", '5': "6", '6': "11b"}
 num_to_opt_rules_menu = {1: "4", 2: "4a", 3: "5a", 4: "6", 5: "11b"}
+list_of_expressions_lists = []
 
 
 def tester_menu():
@@ -12,12 +13,22 @@ def tester_menu():
     for entry in sorted(options):
         print(entry + ". " + menu[entry])
     option_num = input()
+    is_option_valid = False
 
-    if option_num == '1' or option_num == '2':
-        optimize_query(menu[option_num])
-    else:
-        print("Part 3 yet to be implemented or illegal option!")
+    while not is_option_valid:
+        if option_num == '1' or option_num == '2':
+            optimize_query(menu[option_num])
+            is_option_valid = True
+        elif option_num == '3':
+            '''implementation part 3'''
+            estimateQueryPlans()
+            is_option_valid = True
+        else:
+            print("illegal option, must an existing option number, please try again!")
 
+
+def estimateQueryPlans():
+    '''YET TO BE IMPLEENTED'''
 
 def optimize_query(mode):
     expression_list = create_expression_list()
@@ -26,12 +37,13 @@ def optimize_query(mode):
         optimization_rule = get_optimization_rule()
         optimized_exp_list = optimize_expr_by_opt_rule(expression_list.copy(), optimization_rule.strip())
     elif mode == "Part 2":
-        list_of_expressions_lists = [copy.deepcopy(expression_list), copy.deepcopy(expression_list),
-                                     copy.deepcopy(expression_list), copy.deepcopy(expression_list)]
+        '''Making 4 copies of Logical Queries Expressions '''
+        for i in range(0, 4):
+            list_of_expressions_lists.append(copy.deepcopy(expression_list))
         for i in range(0, 4):
             for itr in range(0, 10):
                 print(f"Iteration {itr + 1} out of 10:")
-                optimization_rule = num_to_opt_rules_menu[random.randint(1, 2)]
+                optimization_rule = num_to_opt_rules_menu[random.randint(1, 6)]
                 list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i],
                                                                          optimization_rule.strip())
                 # '''list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i], '4')'''
@@ -43,7 +55,6 @@ def optimize_query(mode):
             print(f"optimized expression number {i + 1}:")
             print_expression_list(list_of_expressions_lists[i])
             print("\n", end="")
-
 
 def optimize_expr_by_opt_rule(expression_list, optimization_rule):
     optimized_expression_list = []
@@ -64,7 +75,7 @@ def optimize_expr_by_opt_rule(expression_list, optimization_rule):
 def apply_rule_4(expression_list):
     print("Applying optimization rule 4 ...")
     for ind, op in enumerate(expression_list):
-        if isinstance(op, sigma):
+        if isinstance(op, Sigma):
             partitioned_and_index = get_partitioned_and_index_aux(op.predicate)
             if partitioned_and_index != -1:
                 expression_list = update_expression_rule_4(partitioned_and_index, ind, expression_list)
@@ -77,7 +88,7 @@ def apply_rule_4(expression_list):
 
 def update_expression_rule_4(and_str_index, sigma_list_index, expression_list):
     predicate = expression_list[sigma_list_index].predicate
-    left_sigma = sigma(predicate[:and_str_index].strip())
+    left_sigma = Sigma(predicate[:and_str_index].strip())
     expression_list[sigma_list_index].predicate = predicate[and_str_index + 3:].strip()
     expression_list.insert(sigma_list_index, left_sigma)
 
@@ -157,9 +168,9 @@ def create_expression_list():
     else:
         condition_str = query_str[where_idx + 5:].strip()
 
-    pi_elem = pi(attribute_list_str.split(","))
-    sigma_elem = sigma(condition_str)
-    cartesian_elem = cartesian(table_list_str.split(","))
+    pi_elem = Pi(attribute_list_str.split(","))
+    sigma_elem = Sigma(condition_str)
+    cartesian_elem = Cartesian(table_list_str.split(","))
     expression_list = [pi_elem, sigma_elem, cartesian_elem]
 
     return expression_list
@@ -317,7 +328,7 @@ def is_a_string(sql_str):
             sql_str[0] == "’" and sql_str[-1] == "’") or (sql_str[0] == "`" and sql_str[-1] == "`")
 
 
-class pi:
+class Pi:
     def __init__(self, att_list):
         self.att_list = att_list
 
@@ -332,7 +343,7 @@ class pi:
         return representing_str
 
 
-class sigma:
+class Sigma:
     def __init__(self, predicate):
         self.predicate = predicate
 
@@ -343,7 +354,7 @@ class sigma:
         return representing_str
 
 
-class cartesian:
+class Cartesian:
     def __init__(self, table_list):
         self.table_list = table_list
 
@@ -358,7 +369,7 @@ class cartesian:
         return representing_str
 
 
-class njoin:
+class Njoin:
     def __init__(self, table_list):
         self.table_list = table_list
 
@@ -373,7 +384,7 @@ class njoin:
         return representing_str
 
 
-class tjoin:
+class Tjoin:
     def __init__(self, predicate, table_list):
         self.predicate = predicate
         self.table_list = table_list
@@ -388,6 +399,11 @@ class tjoin:
         representing_str += ")"
 
         return representing_str
+
+class Schema:
+    def __init__(self, n_rows, n_width):
+        self.n_rows = n_rows
+        self.n_width = n_width
 
 
 if __name__ == '__main__':
