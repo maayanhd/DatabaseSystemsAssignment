@@ -1,10 +1,13 @@
 import copy
 import random
 
-rules_menu = {'1': "4", '2': "4a", '3': "5a", '5': "6", '6': "11b"}
-num_to_opt_rules_menu = {1: "4", 2: "4a", 3: "5a", 4: "6", 5: "11b"}
+rules_menu = {'1': "4", '2': "4a", '3': "5a", '4': "6", '5': "6a", '6':'11b'}
+num_to_opt_rules_menu = {1: "4", 2: "4a", 3: "5a", 4: "6", 5: "6a", 6:"11b"}
 list_of_expressions_lists = []
+lqp_state = []
 
+''' auxiliary for 5a'''
+parsed_predicate_att_list = []
 
 def tester_menu():
     menu = {'1': "Part 1", '2': "Part 2", '3': "Part 3"}
@@ -43,7 +46,7 @@ def optimize_query(mode):
         for i in range(0, 4):
             for itr in range(0, 10):
                 print(f"Iteration {itr + 1} out of 10:")
-                optimization_rule = num_to_opt_rules_menu[random.randint(1, 6)]
+                optimization_rule = num_to_opt_rules_menu[random.choice([1,2,3,6])]
                 list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i],
                                                                          optimization_rule.strip())
                 # '''list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i], '4')'''
@@ -66,6 +69,8 @@ def optimize_expr_by_opt_rule(expression_list, optimization_rule):
         optimized_expression_list = apply_rule_5a(expression_list)
     elif optimization_rule == '6':
         optimized_expression_list = apply_rule_6(expression_list)
+    elif optimization_rule == '6a':
+        optimized_expression_list = apply_rule_6a(expression_list)
     elif optimization_rule == '11b':
         optimized_expression_list = apply_rule_11b(expression_list)
 
@@ -74,6 +79,7 @@ def optimize_expr_by_opt_rule(expression_list, optimization_rule):
 
 def apply_rule_4(expression_list):
     print("Applying optimization rule 4 ...")
+    lqp_state.append("4")
     for ind, op in enumerate(expression_list):
         if isinstance(op, Sigma):
             partitioned_and_index = get_partitioned_and_index_aux(op.predicate)
@@ -83,10 +89,12 @@ def apply_rule_4(expression_list):
 
     print_expression_list(expression_list)
     print("\n\n", end="")
+    lqp_state.clear()
     return expression_list
 
 
 def update_expression_rule_4(and_str_index, sigma_list_index, expression_list):
+
     predicate = expression_list[sigma_list_index].predicate
     left_sigma = Sigma(predicate[:and_str_index].strip())
     expression_list[sigma_list_index].predicate = predicate[and_str_index + 3:].strip()
@@ -96,12 +104,57 @@ def update_expression_rule_4(and_str_index, sigma_list_index, expression_list):
 
 
 def apply_rule_4a(expression_list):
-    return expression_list
+
+    new_exp_list = copy.deepcopy(expression_list)
+    print("Applying optimization rule 4a ...")
+    lqp_state.append("4a")
+    for i in range (0,len(expression_list) -1):
+        if isinstance(expression_list[i],Sigma) and isinstance(expression_list[i+1],Sigma):
+            new_exp_list[i+1] = expression_list[i].predicate;
+            new_exp_list[i].predicate = expression_list[i+1].predicate;
+            break;
+
+    print_expression_list(new_exp_list)
+    print("\n\n", end="")
+    lqp_state.clear()
+    return new_exp_list
 
 
 def apply_rule_5a(expression_list):
-    optimized_exp_list = []
-    return optimized_exp_list
+    new_exp_list = copy.deepcopy(expression_list)
+    parsed_predicate_att_list.clear()
+    lqp_state.append("5a")
+    print("Applying optimization rule 5a ...")
+    for i in range(0, len(expression_list) - 1):
+        if isinstance(expression_list[i], Pi) and isinstance(expression_list[i + 1], Sigma):
+            temp_predicate = copy.deepcopy(expression_list[i+1].predicate)
+            parse_predicate_to_att_list(temp_predicate)
+            if is_a_contained_in_b(parsed_predicate_att_list,expression_list[i].att_list):
+                temp_sigma = new_exp_list.pop(i+1)
+                new_exp_list.insert(i,temp_sigma)
+                break;
+
+    print_expression_list(new_exp_list)
+    print("\n\n", end="")
+    lqp_state.clear()
+    return new_exp_list
+
+
+
+def parse_predicate_to_att_list(predicate):
+
+    is_condition(predicate)
+
+
+def is_a_contained_in_b(a_list,b_list):
+    print(a_list)
+    print(b_list)
+
+    for elem in a_list:
+        if elem not in b_list:
+            return False
+
+    return True
 
 
 def apply_rule_6(expression_list):
@@ -109,9 +162,27 @@ def apply_rule_6(expression_list):
     return optimized_exp_list
 
 
-def apply_rule_11b():
-    optimized_exp_list = []
-    return optimized_exp_list
+def apply_rule_6a(expression_list):
+
+
+    return expression_list
+
+def apply_rule_11b(expression_list):
+    new_exp_list = copy.deepcopy(expression_list)
+    print("Applying optimization rule 11b ...")
+    lqp_state.append("11b")
+    for i in range (0,len(expression_list) -1):
+        if isinstance(expression_list[i],Sigma) and isinstance(expression_list[i+1],Cartesian):
+            new_tjoin = Tjoin(expression_list[i].predicate)
+            new_exp_list.insert(i,new_tjoin)
+            new_exp_list.pop(i+1)
+            new_exp_list.pop(i+1)
+            break;
+
+    print_expression_list(new_exp_list)
+    print("\n\n", end="")
+    lqp_state.clear()
+    return new_exp_list
 
 
 def get_optimization_rule():
@@ -170,8 +241,9 @@ def create_expression_list():
 
     pi_elem = Pi(attribute_list_str.split(","))
     sigma_elem = Sigma(condition_str)
-    cartesian_elem = Cartesian(table_list_str.split(","))
-    expression_list = [pi_elem, sigma_elem, cartesian_elem]
+    table_lst = table_list_str.split(",")
+
+    expression_list = [pi_elem, sigma_elem, Cartesian(),TableList([Schema(table_lst[0]),Schema(table_lst[1])])]
 
     return expression_list
 
@@ -306,6 +378,7 @@ def is_constant(constant_str):
 
 
 def is_attribute(attribute):
+
     temp_list = attribute.split(".")
     if len(temp_list) != 2:
         return False
@@ -314,11 +387,19 @@ def is_attribute(attribute):
         attribute_name = temp_list[1]
 
         if table_name == "R":
-            return attribute_name.strip() == "A" or attribute_name.strip() == "B" or attribute_name.strip() == "C" or \
-                   attribute_name.strip() == "D" or attribute_name.strip() == "E"
+            if attribute_name.strip() == "A" or attribute_name.strip() == "B" or attribute_name.strip() == "C" or \
+                   attribute_name.strip() == "D" or attribute_name.strip() == "E":
+                if "5a" in lqp_state:
+                    parsed_predicate_att_list.append(attribute)
+                return True
+
         elif table_name == "S":
-            return attribute_name.strip() == "D" or attribute_name.strip() == "E" or attribute_name.strip() == "F" or \
-                   attribute_name.strip() == "G" or attribute_name.strip() == "H" or attribute_name.strip() == "I"
+            if attribute_name.strip() == "D" or attribute_name.strip() == "E" or attribute_name.strip() == "F" or \
+                   attribute_name.strip() == "G" or attribute_name.strip() == "H" or attribute_name.strip() == "I":
+
+                if "5a" in lqp_state:
+                    parsed_predicate_att_list.append(attribute)
+                return True
         else:
             return False
 
@@ -330,7 +411,10 @@ def is_a_string(sql_str):
 
 class Pi:
     def __init__(self, att_list):
-        self.att_list = att_list
+        self.att_list = []
+        for elem in att_list:
+            self.att_list.append(elem.strip())
+
 
     def __str__(self):
         representing_str = "PI["
@@ -345,7 +429,7 @@ class Pi:
 
 class Sigma:
     def __init__(self, predicate):
-        self.predicate = predicate
+        self.predicate = predicate.strip()
 
     def __str__(self):
         representing_str = "SIGMA["
@@ -355,56 +439,57 @@ class Sigma:
 
 
 class Cartesian:
-    def __init__(self, table_list):
-        self.table_list = table_list
+    def __init__(self):
+        pass
 
     def __str__(self):
-        representing_str = "CARTESIAN("
-        for table in self.table_list:
-            representing_str += (table + ",")
-        '''removing the last "," '''
-        representing_str = representing_str[0:-1]
-        representing_str += ")"
-
-        return representing_str
+        return "CARTESIAN"
 
 
 class Njoin:
-    def __init__(self, table_list):
-        self.table_list = table_list
+
+    def __init__(self):
+        pass
 
     def __str__(self):
-        representing_str = "NJOIN("
-        for table in self.table_list:
-            representing_str += (table + ",")
-        '''removing the last "," '''
-        representing_str = representing_str[0:-1]
-        representing_str += ")"
-
-        return representing_str
+        return "NJOIN"
 
 
 class Tjoin:
-    def __init__(self, predicate, table_list):
-        self.predicate = predicate
-        self.table_list = table_list
+    def __init__(self, predicate):
+        self.predicate = predicate.strip()
 
     def __str__(self):
-        representing_str = "[TJOIN"
+        representing_str = "TJOIN["
         representing_str += (self.predicate + "]")
-        for table in self.table_list:
-            representing_str += ("(" + table + ",")
-        '''removing the last "," '''
-        representing_str = representing_str[0:-1]
-        representing_str += ")"
 
         return representing_str
 
+
 class Schema:
-    def __init__(self, n_rows, n_width):
+
+    def __init__(self, name, n_rows=0, n_width=0):
+        self.name = name
         self.n_rows = n_rows
         self.n_width = n_width
 
+    def __str__(self):
+        return self.name
+
+
+class TableList:
+
+    def __init__(self, table_list):
+        self.table_list = copy.deepcopy(table_list)
+
+    def __str__(self):
+        representing_str = ""
+
+        for table in self.table_list:
+            representing_str += table.__str__() + ","
+        representing_str = representing_str[:-1]
+
+        return representing_str
 
 if __name__ == '__main__':
     tester_menu()
