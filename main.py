@@ -167,17 +167,41 @@ def apply_rule_6a(expression_list):
 
     return expression_list
 
+
+def is_equal_e_col(att_1,att_2):
+
+    return (att_1 == "R.D" and att_2 == "S.D") or (att_1 == "S.D" and att_2 == "R.D")\
+
+
+def is_equal_d_col(att_1,att_2):
+
+    return (att_1 == "S.E" and att_2 == "R.E") or (att_1 == "S.E" and att_2 == "R.E")
+
+
+def is_njoin_predicate(first_simple_cond_lst,second_simple_cond_lst):
+
+    res = (is_equal_e_col(first_simple_cond_lst[0],first_simple_cond_lst[1]) and is_equal_d_col(second_simple_cond_lst[0],second_simple_cond_lst[1]))\
+          or (is_equal_d_col(first_simple_cond_lst[0],first_simple_cond_lst[1]) and is_equal_e_col(second_simple_cond_lst[0],second_simple_cond_lst[1]))
+
+
 def apply_rule_11b(expression_list):
     new_exp_list = copy.deepcopy(expression_list)
     print("Applying optimization rule 11b ...")
     lqp_state.append("11b")
     for i in range (0,len(expression_list) -1):
         if isinstance(expression_list[i],Sigma) and isinstance(expression_list[i+1],Cartesian):
-            new_tjoin = Tjoin(expression_list[i].predicate)
-            new_exp_list.insert(i,new_tjoin)
-            new_exp_list.pop(i+1)
-            new_exp_list.pop(i+1)
-            break;
+
+            parsed_cond = expression_list[i].predicate.split("AND")
+            if len(parsed_cond) == 2:
+                first_simple_cond = parsed_cond[0].strip().split("=")
+                second_simple_cond = parsed_cond[1].strip().split("=")
+                if len(first_simple_cond) == 2 and len(second_simple_cond) == 2:
+                    if is_njoin_predicate(first_simple_cond,second_simple_cond):
+                        new_njoin = Njoin()
+                        new_exp_list.insert(i,new_njoin)
+                        new_exp_list.pop(i+1)
+                        new_exp_list.pop(i+1)
+                        break;
 
     print_expression_list(new_exp_list)
     print("\n\n", end="")
