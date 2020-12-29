@@ -21,6 +21,7 @@ parsed_predicate_att_list = []
 def tester_menu():
     menu = {'1': "Part 1", '2': "Part 2", '3': "Part 3"}
     options = menu.keys()
+
     print("please choose an option:")
     for entry in sorted(options):
         print(entry + ". " + menu[entry])
@@ -29,42 +30,94 @@ def tester_menu():
 
     while not is_option_valid:
         if option_num == '1' or option_num == '2':
-            optimize_query(menu[option_num])
+            expression_list = create_expression_list()
+            optimize_query(menu[option_num],expression_list)
             is_option_valid = True
         elif option_num == '3':
             '''implementation part 3'''
-            estimateQueryPlans()
+            estimate_query_plans()
             is_option_valid = True
         else:
             print("illegal option, must an existing option number, please try again!")
 
 
-def estimateQueryPlans():
+def estimate_query_plans():
+
+    expression_list = adjust_expression_list_by_file(create_expression_list())
+    list_of_expressions = optimize_query("Part 2", expression_list)
+
+    for exp in list_of_expressions:
+        estimate_query_plan(reverse(exp))
+
+
+def estimate_query_plan(reversed_exp_list, is_cartesian):
+    #using boolean variable for recursive part indicating whether the pair is belong to cartesian or to a natural join operator
+
+    for i,elem in enumerate(reversed_exp_list):
+        if isinstance(elem,Pi):
+            pass
+        elif isinstance(elem,Sigma):
+            pass
+        elif isinstance(elem,Cartesian):
+           pass
+        elif isinstance(elem,Njoin):
+            pass
+        elif isinstance(elem, Pair):
+            estimate_query_plan(reversed_exp_list[i].reverse)
+            estimate_query_plan(reversed_exp_list[i].reverse)
+
+
+def estimate_pi(num_and_row_tuple):
+    pass
+
+def adjust_expression_list_by_file(expression_list):
+
     buffer_of_stat_file = open("statistics.txt", "r")
+    new_exp_list = copy.deepcopy(expression_list)
 
     for i in range(2):
 
         info_line = buffer_of_stat_file.readline()
-        name = info_line.split(" ")[1]
+        new_exp_list[-1].get_list_by_i(i)[0].name = info_line.split(" ")[1].strip()
         info_line = buffer_of_stat_file.readline()
         info_line = line[2:-1]
         type_list = info_line.split(",")
         att_list = []
+        att_to_type = {}
         for att in type_list:
             att_list.append(att[0])
+            att_to_type[att[0]] = att.split(":")[1]
+
+        att_to_size = estimate_att_size_list(att_to_type)
+        new_exp_list[-1].get_list_by_i(i)[0].att_list = copy.deepcopy(att_list)
+        new_exp_list[-1].get_list_by_i(i)[0].att_to_size = copy.deepcopy(att_to_size)
 
         info_line = buffer_of_stat_file.readline()
-        n_r = info_line.split(" ")[1]
-        v_att_list = {}
+        new_exp_list[-1].get_list_by_i(i)[0].n_rows = info_line.split(" ")[1]
+        new_exp_list[-1].get_list_by_i(i)[0].n_width = len(att_list)
+
+        att_to_v = {}
         for att in att_list:
             info_line = buffer_of_stat_file.readline()
-            v_att_list[att] = info_line.split("=")[1]
+            att_to_v[att] = info_line.split("=")[1]
 
-        buffer_of_stat_file.close()
+        new_exp_list[-1].get_list_by_i(i)[0].att_to_v = copy.deepcopy(att_to_v)
+
+    buffer_of_stat_file.close()
+    return new_exp_list
 
 
-def optimize_query(mode):
-    expression_list = create_expression_list()
+def estimate_att_size_list(att_to_type):
+    att_to_size = {}
+
+    for att in att_to_type:
+        if att_to_type[att] == "INTEGER":
+            att_to_size[att] = 4
+
+    return att_to_size
+
+
+def optimize_query(mode, expression_list):
 
     if mode == "Part 1":
         optimization_rule = get_optimization_rule()
@@ -93,6 +146,8 @@ def optimize_query(mode):
             print(f"optimized expression number {i + 1}:")
             print_expression_list(list_of_expressions_lists[i])
             print("\n", end="")
+
+        return list_of_expressions_lists
 
 
 def optimize_expr_by_opt_rule(expression_list, optimization_rule):
@@ -620,10 +675,13 @@ class Njoin:
 
 class Schema:
 
-    def __init__(self, name, n_rows=0, n_width=0):
+    def __init__(self, name, n_rows=0, att_list = None, att_to_v = None, att_to_size = None):
         self.name = name.strip()
         self.n_rows = n_rows
-        self.n_width = n_width
+        self.n_width = len(att_list)
+        self.att_to_v = att_to_v
+        self.att_list = att_list
+        self.att_to_size = att_to_size
 
     def __str__(self):
         return self.name
@@ -640,6 +698,14 @@ class Pair:
     def __init__(self, left_list, right_list):
         self.left_lst = left_list
         self.right_lst = right_list
+
+    def get_list_by_i(self, i):
+        if i==0:
+            return self.left_lst
+        elif i==1:
+            return self.right_lst
+        else:
+            return None
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
