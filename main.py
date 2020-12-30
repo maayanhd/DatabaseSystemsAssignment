@@ -2,11 +2,10 @@ import copy
 import random
 
 ''' 
-1.Fix spaces in printing
-2.Duplicates in global list
-3. Debugging rule 4 part 2
-4. Add V(Attribute) to scheme class and create schemes
-5. Create queries for part 2
+1.Fix spaces in printing - need to be checked
+2.Duplicates in global list - not yet
+3. Debugging rule 4 part 2 - partly
+5. Create queries for part 2- partly
 '''
 
 rules_menu = {'1': "4", '2': "4a", '3': "5a", '4': "6", '5': "6a", '6': '11b'}
@@ -14,7 +13,7 @@ num_to_opt_rules_menu = {1: "4", 2: "4a", 3: "5a", 4: "6", 5: "6a", 6: "11b"}
 list_of_expressions_lists = []
 lqp_state = []
 
-''' auxiliary for 5a'''
+''' auxiliary for parsing conditions using a modification of is_condition method from the previous exercise '''
 parsed_predicate_att_list = []
 
 
@@ -34,11 +33,11 @@ def tester_menu():
             optimize_query(menu[option_num],expression_list)
             is_option_valid = True
         elif option_num == '3':
-            '''implementation part 3'''
             estimate_query_plans()
             is_option_valid = True
         else:
             print("illegal option, must an existing option number, please try again!")
+            is_option_valid = False
 
 
 def estimate_query_plans():
@@ -50,9 +49,10 @@ def estimate_query_plans():
         estimate_query_plan(reverse(exp))
 
 
-def estimate_query_plan(reversed_exp_list, is_cartesian):
-    #using boolean variable for recursive part indicating whether the pair is belong to cartesian or to a natural join operator
-
+def estimate_query_plan(reversed_exp_list):
+    '''creating an empty tuple for the estimation result of the given expression in that form -> (number of rows, size of a row )'''
+    left_schema_res = None
+    right_schema_res = None
     for i,elem in enumerate(reversed_exp_list):
         if isinstance(elem,Pi):
             pass
@@ -63,12 +63,100 @@ def estimate_query_plan(reversed_exp_list, is_cartesian):
         elif isinstance(elem,Njoin):
             pass
         elif isinstance(elem, Pair):
-            estimate_query_plan(reversed_exp_list[i].reverse)
-            estimate_query_plan(reversed_exp_list[i].reverse)
+            left_schema_res = estimate_query_plan(reversed_exp_list[i].left_list.reverse())
+            right_schema_res = estimate_query_plan(reversed_exp_list[i].right_list.reverse())
+        elif isinstance(elem, Schema):
+            res_schema = Schema(elem.name, elem.n_rows, elem.att_list, elem.att_to_v, elem_att_to_size)
+
+    return res_schema
 
 
-def estimate_pi(num_and_row_tuple):
-    pass
+def estimate_pi(pi_operator, processed_schema):
+
+    res_att_to_v = {}
+    res_att_to_size = {}
+    for att in pi_operator.att_list:
+        res_att_to_v[att] = processed_schema.att_to_v[att]
+        res_att_to_size[att] = res_att_to_size[att]
+
+    res_schema = Schema("W", processed_schema.n_rows, pi_operator.att_list,res_att_to_v,res_att_to_size)
+
+    return res_schema
+
+def estimate_cartesian(schema_1,schema_2):
+    new_att_list = copy.deepcopy(schema_1.att_list).extend(copy.deepcopy(schema_2.att_list))
+    new_att_to_v = copy.deepcopy(schema_1.att_to_v).update(copy.deepcopy(schema_2.att_to_v))
+    new_att_to_size = copy.deepcopy(schema_1.att_to_size).update(copy.deepcopy(schema_2.att_to_size))
+
+    res_schema = Schema("W",schema_1.n_rows * schema_2.n_rows,new_att_list,new_att_to_v,new_att_to_size)
+
+    return res_schema
+
+def estimate_sigma(sigma_op, processed_schema):
+    sigma_list = [sigma_op]
+    simple_cond_prob = 1.0
+    sigma_list_length = len(sigma_list)
+    new_sigma_list = apply_rule_4(sigma_list)
+
+    while sigma_list_length < len(new_sigma_list):
+        '''while rule 4 applied - meaning '''
+        sigma_list = new_sigma_list
+        new_sigma_list = apply_rule_4(sigma_list)
+        sigma_list_length = len(sigma_list)
+    '''at this point sigma list contains only sigma instances with simple condition '''
+
+    for sigma in new_sigma_list:
+        simple_cond_prob *= get_probability_by_condition(sigma.predicate, processed_schema.att_to_v)
+
+    return Schema("W", simple_cond_prob * processed_schema.n_rows, processed_schema.att_list, processed_schema.att_to_v, processed_schema.att_to_size)
+
+
+def get_probability_by_condition(curr_sigma_predicate, att_to_v):
+    '''under the assumption only "=" and simple conditions- design by contract and by given clarifications'''
+    parsed_simple_condition = curr_sigma_predicate.split("=")
+    cond_probability = 0.0
+
+    if parsed_simple_condition[0] == parsed_simple_condition[1]:
+        cond_probability = 1.0
+    if parsed_simple_condition[0].isnumeric and not parsed_simple_condition[1].isnumeric:
+        att = parsed_simple_condition[1]
+        cond_probability = 1.0 / att_to_v[att]
+    elif not parsed_simple_condition[0].isnumeric and parsed_simple_condition[1].isnumeric:
+        att = parsed_simple_condition[0]
+        cond_probability = 1.0 / att_to_v[att]
+    elif not parsed_simple_condition[0].isnumeric and not parsed_simple_condition[1].isnumeric:
+        if is_attribute(parsed_simple_condition[0]) and is_attribute(parsed_simple_condition[1]):
+            v_att_0 = att_to_v[parsed_simple_condition[0]]
+            v_att_1 = att_to_v[parsed_simple_condition[1]]
+            cond_probability = 1.0 / (max(v_att_0, v_att_1))
+    else:
+        cond_probability = 0.0
+
+    return cond_probability
+
+
+def is_att_in_list(att,att_list):
+
+    for elem in att_list:
+        if att[-1] == elem[-1]:
+            return True
+
+    return False
+
+def estimate_njoin(schema_1,schema_2):
+    new_att_list = copy.deepcopy(schema_1.att_list)
+    new_att_to_v = copy.deepcopy(schema_1.att_to_v)
+    new_att_to_size = copy.deepcopy(schema_1.att_to_size)
+
+    for att in schema_2.att_list:
+
+        if not is_att_in_list(att, schema_1.att_list):
+            new_att_list.append(att)
+            new_att_to_v[att] = schema_2.att_to_v[att]
+            new_att_to_size[att] = schema_2.att_to_size[att]
+    res_schema = Schema("W", schema_1.n_rows * schema_2.n_rows, new_att_list, new_att_to_v, new_att_to_size)
+
+    return res_schema
 
 def adjust_expression_list_by_file(expression_list):
 
@@ -85,8 +173,8 @@ def adjust_expression_list_by_file(expression_list):
         att_list = []
         att_to_type = {}
         for att in type_list:
-            att_list.append(att[0])
-            att_to_type[att[0]] = att.split(":")[1]
+            att_list.append(name + "." + att[0])
+            att_to_type[name + "." + att[0]] = att.split(":")[1]
 
         att_to_size = estimate_att_size_list(att_to_type)
         new_exp_list[-1].get_list_by_i(i)[0].att_list = copy.deepcopy(att_list)
@@ -682,6 +770,13 @@ class Schema:
         self.att_to_v = att_to_v
         self.att_list = att_list
         self.att_to_size = att_to_size
+        self.size_of_row = calc_row_size()
+
+    def calc_row_size(self):
+        row_size = 0
+        for att in self.att_to_size:
+            row_size += att_to_size[att]
+        return row_size
 
     def __str__(self):
         return self.name
