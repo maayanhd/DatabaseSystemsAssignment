@@ -46,27 +46,55 @@ def estimate_query_plans():
     list_of_expressions = optimize_query("Part 2", expression_list)
 
     for exp in list_of_expressions:
-        estimate_query_plan(reverse(exp))
+        exp_list = copy.deepcopy(exp)
+        exp_list.reverse()
+        estimate_query_plan(exp_list)
+
+def estimate_query_plan_aux(reversed_exp_list):
+
+    ''' take care of the pair estimation'''
+
+    reversed_exp_list[i].left_lst.reverse()
+    reversed_exp_list[i].right_lst.reverse()
+    left_schema_res = estimate_query_plan(reversed_exp_list[i])
+    right_schema_res = estimate_query_plan(reversed_exp_list[i])
+
 
 
 def estimate_query_plan(reversed_exp_list):
-    '''creating an empty tuple for the estimation result of the given expression in that form -> (number of rows, size of a row )'''
-    left_schema_res = None
-    right_schema_res = None
+
+    """ in order to avoid compilation errors, creating temp initial Schemas, that will be initialized first by design (design by contract) """
+
+    left_schema_res = Schema("initial")
+    right_schema_res = Schema("initial")
+    res_schema = Schema("initial")
+
     for i,elem in enumerate(reversed_exp_list):
         if isinstance(elem,Pi):
-            pass
+            res_schema.print_estimation_status("input")
+            res_schema.__copy__(estimate_pi(elem, res_schema))
+            res_schema.print_estimation_status("output")
         elif isinstance(elem,Sigma):
-            pass
+            res_schema.print_estimation_status("input")
+            res_schema.__copy__(estimate_sigma(elem, res_schema))
+            res_schema.print_estimation_status("output")
         elif isinstance(elem,Cartesian):
-           pass
+            res_schema.print_estimation_status("input")
+            res_schema.__copy__(estimate_cartesian(left_schema_res,right_schema_res))
+            res_schema.print_estimation_status("output")
         elif isinstance(elem,Njoin):
-            pass
+            res_schema.print_estimation_status("input")
+            res_schema.__copy__(estimate_njoin(left_schema_res,right_schema_res))
+            res_schema.print_estimation_status("output")
         elif isinstance(elem, Pair):
-            left_schema_res = estimate_query_plan(reversed_exp_list[i].left_list.reverse())
-            right_schema_res = estimate_query_plan(reversed_exp_list[i].right_list.reverse())
+            reversed_exp_list[i].left_lst.reverse()
+            reversed_exp_list[i].right_lst.reverse()
+            left_schema_res.__copy__(estimate_query_plan(reversed_exp_list[i].left_lst))
+            right_schema_res.__copy__(estimate_query_plan(reversed_exp_list[i].right_lst))
         elif isinstance(elem, Schema):
-            res_schema = Schema(elem.name, elem.n_rows, elem.att_list, elem.att_to_v, elem_att_to_size)
+            res_schema.print_estimation_status("input")
+            res_schema.__copy__(elem)
+            res_schema.print_estimation_status("output")
 
     return res_schema
 
@@ -84,10 +112,12 @@ def estimate_pi(pi_operator, processed_schema):
     return res_schema
 
 def estimate_cartesian(schema_1,schema_2):
-    new_att_list = copy.deepcopy(schema_1.att_list).extend(copy.deepcopy(schema_2.att_list))
-    new_att_to_v = copy.deepcopy(schema_1.att_to_v).update(copy.deepcopy(schema_2.att_to_v))
-    new_att_to_size = copy.deepcopy(schema_1.att_to_size).update(copy.deepcopy(schema_2.att_to_size))
-
+    new_att_list = copy.deepcopy(schema_1.att_list)
+    new_att_list.extend(copy.deepcopy(schema_2.att_list))
+    new_att_to_v = copy.deepcopy(schema_1.att_to_v)
+    new_att_to_v.update(copy.deepcopy(schema_2.att_to_v))
+    new_att_to_size = copy.deepcopy(schema_1.att_to_size)
+    new_att_to_size.update(copy.deepcopy(schema_2.att_to_size))
     res_schema = Schema("W",schema_1.n_rows * schema_2.n_rows,new_att_list,new_att_to_v,new_att_to_size)
 
     return res_schema
@@ -112,19 +142,19 @@ def estimate_sigma(sigma_op, processed_schema):
 
 
 def get_probability_by_condition(curr_sigma_predicate, att_to_v):
-    '''under the assumption only "=" and simple conditions- design by contract and by given clarifications'''
+    """under the assumption only "=" and simple conditions- design by contract and by given clarifications"""
     parsed_simple_condition = curr_sigma_predicate.split("=")
     cond_probability = 0.0
 
     if parsed_simple_condition[0] == parsed_simple_condition[1]:
         cond_probability = 1.0
-    if parsed_simple_condition[0].isnumeric and not parsed_simple_condition[1].isnumeric:
+    if parsed_simple_condition[0].isnumeric() and not parsed_simple_condition[1].isnumeric():
         att = parsed_simple_condition[1]
         cond_probability = 1.0 / att_to_v[att]
-    elif not parsed_simple_condition[0].isnumeric and parsed_simple_condition[1].isnumeric:
+    elif not parsed_simple_condition[0].isnumeric() and parsed_simple_condition[1].isnumeric():
         att = parsed_simple_condition[0]
         cond_probability = 1.0 / att_to_v[att]
-    elif not parsed_simple_condition[0].isnumeric and not parsed_simple_condition[1].isnumeric:
+    elif not parsed_simple_condition[0].isnumeric() and not parsed_simple_condition[1].isnumeric():
         if is_attribute(parsed_simple_condition[0]) and is_attribute(parsed_simple_condition[1]):
             v_att_0 = att_to_v[parsed_simple_condition[0]]
             v_att_1 = att_to_v[parsed_simple_condition[1]]
@@ -144,6 +174,7 @@ def is_att_in_list(att,att_list):
     return False
 
 def estimate_njoin(schema_1,schema_2):
+
     new_att_list = copy.deepcopy(schema_1.att_list)
     new_att_to_v = copy.deepcopy(schema_1.att_to_v)
     new_att_to_size = copy.deepcopy(schema_1.att_to_size)
@@ -154,6 +185,7 @@ def estimate_njoin(schema_1,schema_2):
             new_att_list.append(att)
             new_att_to_v[att] = schema_2.att_to_v[att]
             new_att_to_size[att] = schema_2.att_to_size[att]
+
     res_schema = Schema("W", schema_1.n_rows * schema_2.n_rows, new_att_list, new_att_to_v, new_att_to_size)
 
     return res_schema
@@ -164,33 +196,34 @@ def adjust_expression_list_by_file(expression_list):
     new_exp_list = copy.deepcopy(expression_list)
 
     for i in range(2):
-
-        info_line = buffer_of_stat_file.readline()
-        new_exp_list[-1].get_list_by_i(i)[0].name = info_line.split(" ")[1].strip()
-        info_line = buffer_of_stat_file.readline()
-        info_line = line[2:-1]
+        ''' parsing Pair operator - last element in expression list would be of Pair class (design by contract)'''
+        info_line = buffer_of_stat_file.readline()[:-1]
+        new_exp_list[-1].get_i_elem_in_pair(i)[0].name = info_line.split(" ")[1].strip()
+        info_line = buffer_of_stat_file.readline()[:-1]
+        """reading without '\n' and  parenthesis"""
+        info_line = info_line[2:-1]
         type_list = info_line.split(",")
         att_list = []
         att_to_type = {}
         for att in type_list:
-            att_list.append(name + "." + att[0])
-            att_to_type[name + "." + att[0]] = att.split(":")[1]
+            att_list.append(new_exp_list[-1].get_i_elem_in_pair(i)[0].name + "." + att[0])
+            att_to_type[new_exp_list[-1].get_i_elem_in_pair(i)[0].name + "." + att[0]] = att.split(":")[1]
 
         att_to_size = estimate_att_size_list(att_to_type)
-        new_exp_list[-1].get_list_by_i(i)[0].att_list = copy.deepcopy(att_list)
-        new_exp_list[-1].get_list_by_i(i)[0].att_to_size = copy.deepcopy(att_to_size)
+        new_exp_list[-1].get_i_elem_in_pair(i)[0].att_list = copy.deepcopy(att_list)
+        new_exp_list[-1].get_i_elem_in_pair(i)[0].att_to_size = copy.deepcopy(att_to_size)
 
-        info_line = buffer_of_stat_file.readline()
-        new_exp_list[-1].get_list_by_i(i)[0].n_rows = info_line.split(" ")[1]
-        new_exp_list[-1].get_list_by_i(i)[0].n_width = len(att_list)
+        info_line = buffer_of_stat_file.readline()[:-1]
+        new_exp_list[-1].get_i_elem_in_pair(i)[0].n_rows = int(info_line.split("=")[1])
+        new_exp_list[-1].get_i_elem_in_pair(i)[0].n_width = len(att_list)
 
         att_to_v = {}
         for att in att_list:
-            info_line = buffer_of_stat_file.readline()
-            att_to_v[att] = info_line.split("=")[1]
+            info_line = buffer_of_stat_file.readline()[:-1]
+            att_to_v[att] = int(info_line.split("=")[1])
 
-        new_exp_list[-1].get_list_by_i(i)[0].att_to_v = copy.deepcopy(att_to_v)
-
+        new_exp_list[-1].get_i_elem_in_pair(i)[0].att_to_v = copy.deepcopy(att_to_v)
+        info_line = buffer_of_stat_file.readline()[:-1]
     buffer_of_stat_file.close()
     return new_exp_list
 
@@ -763,19 +796,37 @@ class Njoin:
 
 class Schema:
 
-    def __init__(self, name, n_rows=0, att_list = None, att_to_v = None, att_to_size = None):
+    def __init__(self, name, n_rows=0, att_list =[], att_to_v = [], att_to_size = []):
         self.name = name.strip()
         self.n_rows = n_rows
+
         self.n_width = len(att_list)
         self.att_to_v = att_to_v
         self.att_list = att_list
         self.att_to_size = att_to_size
-        self.size_of_row = calc_row_size()
+        self.size_of_row = self.calc_row_size()
+
+
+    def __copy__(self, other):
+
+        self.name = other.name.strip()
+        self.n_rows = other.n_rows
+
+        self.n_width = len(other.att_list)
+        self.att_to_v = copy.deepcopy(other.att_to_v)
+        self.att_list = copy.deepcopy(other.att_list)
+        self.att_to_size = copy.deepcopy(other.att_to_size)
+        self.size_of_row = self.calc_row_size()
+
+    def print_estimation_status(self, inputOrOutputStr):
+
+        print(inputOrOutputStr, end = "\n")
+        print(f"n_{self.name}=" + self.n_rows + f"n_{self.name}=" + self.size_of_row + "\n")
 
     def calc_row_size(self):
         row_size = 0
         for att in self.att_to_size:
-            row_size += att_to_size[att]
+            row_size += self.att_to_size[att]
         return row_size
 
     def __str__(self):
@@ -794,7 +845,7 @@ class Pair:
         self.left_lst = left_list
         self.right_lst = right_list
 
-    def get_list_by_i(self, i):
+    def get_i_elem_in_pair(self, i):
         if i==0:
             return self.left_lst
         elif i==1:
