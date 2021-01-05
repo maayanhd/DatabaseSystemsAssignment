@@ -1,5 +1,6 @@
 import copy
 import random
+import math
 
 ''' 
 1.Fix spaces in printing - need to be checked
@@ -46,19 +47,12 @@ def estimate_query_plans():
     list_of_expressions = optimize_query("Part 2", expression_list)
 
     for exp in list_of_expressions:
+        print("Size estimation of: ", end ="")
+        print_expression_list(exp)
+        print("")
         exp_list = copy.deepcopy(exp)
         exp_list.reverse()
         estimate_query_plan(exp_list)
-
-def estimate_query_plan_aux(reversed_exp_list):
-
-    ''' take care of the pair estimation'''
-
-    reversed_exp_list[i].left_lst.reverse()
-    reversed_exp_list[i].right_lst.reverse()
-    left_schema_res = estimate_query_plan(reversed_exp_list[i])
-    right_schema_res = estimate_query_plan(reversed_exp_list[i])
-
 
 
 def estimate_query_plan(reversed_exp_list):
@@ -71,58 +65,66 @@ def estimate_query_plan(reversed_exp_list):
 
     for i,elem in enumerate(reversed_exp_list):
         if isinstance(elem,Pi):
-            res_schema.print_estimation_status("input")
             res_schema.__copy__(estimate_pi(elem, res_schema))
-            res_schema.print_estimation_status("output")
         elif isinstance(elem,Sigma):
-            res_schema.print_estimation_status("input")
             res_schema.__copy__(estimate_sigma(elem, res_schema))
-            res_schema.print_estimation_status("output")
         elif isinstance(elem,Cartesian):
-            res_schema.print_estimation_status("input")
             res_schema.__copy__(estimate_cartesian(left_schema_res,right_schema_res))
-            res_schema.print_estimation_status("output")
         elif isinstance(elem,Njoin):
-            res_schema.print_estimation_status("input")
             res_schema.__copy__(estimate_njoin(left_schema_res,right_schema_res))
-            res_schema.print_estimation_status("output")
         elif isinstance(elem, Pair):
             reversed_exp_list[i].left_lst.reverse()
             reversed_exp_list[i].right_lst.reverse()
             left_schema_res.__copy__(estimate_query_plan(reversed_exp_list[i].left_lst))
             right_schema_res.__copy__(estimate_query_plan(reversed_exp_list[i].right_lst))
         elif isinstance(elem, Schema):
-            res_schema.print_estimation_status("input")
             res_schema.__copy__(elem)
-            res_schema.print_estimation_status("output")
 
     return res_schema
 
 
 def estimate_pi(pi_operator, processed_schema):
 
+    print(pi_operator.__str__())
+    print("input: " + processed_schema.get_estimation_stat_str())
+
     res_att_to_v = {}
     res_att_to_size = {}
     for att in pi_operator.att_list:
         res_att_to_v[att] = processed_schema.att_to_v[att]
-        res_att_to_size[att] = res_att_to_size[att]
+        res_att_to_size[att] = processed_schema.att_to_size[att]
 
-    res_schema = Schema("W", processed_schema.n_rows, pi_operator.att_list,res_att_to_v,res_att_to_size)
+    res_schema = Schema("Scheme" + str(processed_schema.name_counter + 1), processed_schema.n_rows,\
+                        pi_operator.att_list,res_att_to_v,res_att_to_size, processed_schema.name_counter + 1)
+
+    print("output: " + res_schema.get_estimation_stat_str()+ "\n")
 
     return res_schema
 
 def estimate_cartesian(schema_1,schema_2):
+
+    print("CARTESIAN")
+    print("input: " + schema_1.get_estimation_stat_str() + " " + schema_2.get_estimation_stat_str())
+
     new_att_list = copy.deepcopy(schema_1.att_list)
     new_att_list.extend(copy.deepcopy(schema_2.att_list))
     new_att_to_v = copy.deepcopy(schema_1.att_to_v)
     new_att_to_v.update(copy.deepcopy(schema_2.att_to_v))
     new_att_to_size = copy.deepcopy(schema_1.att_to_size)
     new_att_to_size.update(copy.deepcopy(schema_2.att_to_size))
-    res_schema = Schema("W",schema_1.n_rows * schema_2.n_rows,new_att_list,new_att_to_v,new_att_to_size)
+
+    res_schema = Schema("Scheme" + str(schema_1.name_counter + schema_2.name_counter + 1),\
+                        schema_1.n_rows * schema_2.n_rows,new_att_list,\
+                        new_att_to_v,new_att_to_size,schema_1.name_counter + schema_2.name_counter + 1)
+
+    print("output: " + res_schema.get_estimation_stat_str()+ "\n")
 
     return res_schema
 
 def estimate_sigma(sigma_op, processed_schema):
+
+    print(sigma_op.__str__())
+    print("input: " + processed_schema.get_estimation_stat_str())
     sigma_list = [sigma_op]
     simple_cond_prob = 1.0
     sigma_list_length = len(sigma_list)
@@ -138,17 +140,46 @@ def estimate_sigma(sigma_op, processed_schema):
     for sigma in new_sigma_list:
         simple_cond_prob *= get_probability_by_condition(sigma.predicate, processed_schema.att_to_v)
 
-    return Schema("W", simple_cond_prob * processed_schema.n_rows, processed_schema.att_list, processed_schema.att_to_v, processed_schema.att_to_size)
 
+    res_schema = Schema("Scheme" + str(processed_schema.name_counter + 1), math.ceil(simple_cond_prob * processed_schema.n_rows),\
+                        processed_schema.att_list, processed_schema.att_to_v,\
+                        processed_schema.att_to_size,processed_schema.name_counter + 1)
+
+    print("output: " + res_schema.get_estimation_stat_str() + "\n")
+
+    return res_schema
+
+
+def estimate_njoin(schema_1,schema_2):
+
+    print("NJOIN")
+    print("input: " + schema_1.get_estimation_stat_str() + " " + schema_2.get_estimation_stat_str())
+
+    new_att_list = copy.deepcopy(schema_1.att_list)
+    new_att_to_v = copy.deepcopy(schema_1.att_to_v)
+    new_att_to_size = copy.deepcopy(schema_1.att_to_size)
+
+    for att in schema_2.att_list:
+
+        if not is_att_in_list(att, schema_1.att_list):
+            new_att_list.append(att)
+            new_att_to_v[att] = schema_2.att_to_v[att]
+            new_att_to_size[att] = schema_2.att_to_size[att]
+
+    res_schema = Schema("Scheme" + str(schema_1.name_counter + schema_2.name_counter + 1),\
+                        schema_1.n_rows * schema_2.n_rows, new_att_list,\
+                        new_att_to_v, new_att_to_size,schema_1.name_counter + schema_2.name_counter + 1)
+
+    print("output: " + res_schema.get_estimation_stat_str() + "\n")
+    return res_schema
 
 def get_probability_by_condition(curr_sigma_predicate, att_to_v):
     """under the assumption only "=" and simple conditions- design by contract and by given clarifications"""
     parsed_simple_condition = curr_sigma_predicate.split("=")
     cond_probability = 0.0
-
     if parsed_simple_condition[0] == parsed_simple_condition[1]:
         cond_probability = 1.0
-    if parsed_simple_condition[0].isnumeric() and not parsed_simple_condition[1].isnumeric():
+    elif parsed_simple_condition[0].isnumeric() and not parsed_simple_condition[1].isnumeric():
         att = parsed_simple_condition[1]
         cond_probability = 1.0 / att_to_v[att]
     elif not parsed_simple_condition[0].isnumeric() and parsed_simple_condition[1].isnumeric():
@@ -173,22 +204,6 @@ def is_att_in_list(att,att_list):
 
     return False
 
-def estimate_njoin(schema_1,schema_2):
-
-    new_att_list = copy.deepcopy(schema_1.att_list)
-    new_att_to_v = copy.deepcopy(schema_1.att_to_v)
-    new_att_to_size = copy.deepcopy(schema_1.att_to_size)
-
-    for att in schema_2.att_list:
-
-        if not is_att_in_list(att, schema_1.att_list):
-            new_att_list.append(att)
-            new_att_to_v[att] = schema_2.att_to_v[att]
-            new_att_to_size[att] = schema_2.att_to_size[att]
-
-    res_schema = Schema("W", schema_1.n_rows * schema_2.n_rows, new_att_list, new_att_to_v, new_att_to_size)
-
-    return res_schema
 
 def adjust_expression_list_by_file(expression_list):
 
@@ -796,32 +811,32 @@ class Njoin:
 
 class Schema:
 
-    def __init__(self, name, n_rows=0, att_list =[], att_to_v = [], att_to_size = []):
+    def __init__(self, name, n_rows=0, att_list =[], att_to_v = [], att_to_size = [], name_counter = 0):
         self.name = name.strip()
         self.n_rows = n_rows
-
         self.n_width = len(att_list)
         self.att_to_v = att_to_v
         self.att_list = att_list
         self.att_to_size = att_to_size
         self.size_of_row = self.calc_row_size()
+        self.name_counter = name_counter
 
 
     def __copy__(self, other):
 
         self.name = other.name.strip()
         self.n_rows = other.n_rows
-
+        self.name_counter = other.name_counter
         self.n_width = len(other.att_list)
         self.att_to_v = copy.deepcopy(other.att_to_v)
         self.att_list = copy.deepcopy(other.att_list)
         self.att_to_size = copy.deepcopy(other.att_to_size)
         self.size_of_row = self.calc_row_size()
 
-    def print_estimation_status(self, inputOrOutputStr):
+    def get_estimation_stat_str(self):
 
-        print(inputOrOutputStr, end = "\n")
-        print(f"n_{self.name}=" + self.n_rows + f"n_{self.name}=" + self.size_of_row + "\n")
+        return f"n_{self.name}=" + str(self.n_rows) + f" R_{self.name}=" + str(self.size_of_row)
+
 
     def calc_row_size(self):
         row_size = 0
