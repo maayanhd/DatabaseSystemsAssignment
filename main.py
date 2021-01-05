@@ -121,6 +121,43 @@ def estimate_cartesian(schema_1,schema_2):
 
     return res_schema
 
+
+def apply_rule_4(expression_list):
+    lqp_state.append("4")
+    ind_of_pair = None
+
+    for ind, op in enumerate(expression_list):
+        if isinstance(op, Sigma):
+            partitioned_and_index = get_partitioned_and_index_aux(op.predicate)
+            if partitioned_and_index != -1:
+                expression_list = update_expression_rule_4(partitioned_and_index, ind, expression_list)
+                break
+        if isinstance(op, Pair):
+            ind_of_pair = ind
+
+    if ind_of_pair:
+        left_list = apply_rule_4(expression_list[ind_of_pair].left_lst)
+        ''' rule 4 still need to be applied'''
+        if left_list == expression_list[ind_of_pair].left_lst:
+            expression_list[ind_of_pair].right_lst = apply_rule_4(expression_list[ind_of_pair].right_lst)
+        else:
+            expression_list[ind_of_pair].left_lst = left_list
+
+    lqp_state.clear()
+    return expression_list
+
+
+def update_expression_rule_4(and_str_index, sigma_list_index, expression_list):
+
+    new_exp_list = copy.deepcopy(expression_list)
+    predicate = expression_list[sigma_list_index].predicate
+    left_sigma = Sigma(predicate[:and_str_index].strip())
+    new_exp_list[sigma_list_index].predicate = predicate[and_str_index + 3:].strip()
+    new_exp_list.insert(sigma_list_index, left_sigma)
+
+    return new_exp_list
+
+
 def estimate_sigma(sigma_op, processed_schema):
 
     print(sigma_op.__str__())
@@ -271,7 +308,7 @@ def optimize_query(mode, expression_list):
                 # optimization_rule = num_to_opt_rules_menu[random.randint(3, 6)]
                 list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i],
                                                                          num_to_opt_rules_menu[
-                                                                             random.choice([1, 3, 4, 5, 6])])
+                                                                             random.choice([6])])
                 # optimization_rule.strip())
                 # '''list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i], '4')'''
             print(f"just finished optimizing logical query plan {i + 1}\n")
@@ -306,39 +343,6 @@ def optimize_expr_by_opt_rule(expression_list, optimization_rule):
 
     return optimized_expression_list
 
-
-def apply_rule_4(expression_list):
-    lqp_state.append("4")
-    ind_of_pair = None
-
-    for ind, op in enumerate(expression_list):
-        if isinstance(op, Sigma):
-            partitioned_and_index = get_partitioned_and_index_aux(op.predicate)
-            if partitioned_and_index != -1:
-                expression_list = update_expression_rule_4(partitioned_and_index, ind, expression_list)
-                break
-        if isinstance(op, Pair):
-            ind_of_pair = ind
-
-    if ind_of_pair:
-        left_list = apply_rule_4(expression_list[ind_of_pair].left_lst)
-        ''' rule 4 still need to be applied'''
-        if left_list == expression_list[ind_of_pair].left_lst:
-            expression_list[ind_of_pair].right_lst = apply_rule_4(expression_list[ind_of_pair].right_lst)
-        else:
-            expression_list[ind_of_pair].left_lst = left_list
-
-    lqp_state.clear()
-    return expression_list
-
-
-def update_expression_rule_4(and_str_index, sigma_list_index, expression_list):
-    predicate = expression_list[sigma_list_index].predicate
-    left_sigma = Sigma(predicate[:and_str_index].strip())
-    expression_list[sigma_list_index].predicate = predicate[and_str_index + 3:].strip()
-    expression_list.insert(sigma_list_index, left_sigma)
-
-    return expression_list
 
 
 def apply_rule_4a(expression_list):
@@ -466,8 +470,10 @@ def is_njoin_predicate(first_simple_cond_lst, second_simple_cond_lst):
     return res_option_1 or res_option_2
 
 
-def is_11b_need_to_be_appllied(cond_to_parse):
+def is_11b_need_to_be_applied(cond_to_parse):
     is_applying_needed = False
+    cond_to_parse = removeAllOuterParenthesis(cond_to_parse)
+    get_partitioned_and_index_aux("AND")
     parsed_cond = cond_to_parse.split("AND")
     first_simple_cond_list = []
     second_simple_cond_list = []
@@ -475,8 +481,8 @@ def is_11b_need_to_be_appllied(cond_to_parse):
         stripped_first_cond = get_stripped_condition(parsed_cond[0].strip())
         stripped_second_cond = get_stripped_condition(parsed_cond[1].strip())
         if is_simple_cond(stripped_first_cond) and is_simple_cond(stripped_second_cond):
-            first_simple_cond_list += stripped_first_cond[0].split("=")
-            second_simple_cond_list += stripped_second_cond[1].split("=")
+            first_simple_cond_list.extend(stripped_first_cond.split("="))
+            second_simple_cond_list.extend(stripped_second_cond.split("="))
 
         if len(first_simple_cond_list) == 2 and len(second_simple_cond_list) == 2:
             if is_njoin_predicate(strip_simple_cond_list(first_simple_cond_list),
@@ -486,18 +492,35 @@ def is_11b_need_to_be_appllied(cond_to_parse):
     return is_applying_needed
 
 
+'''using only in case the content of the parenthesis is a valid condition/simple condition/'''
+def removeAllOuterParenthesis(predicate):
+    content_condition = False
+    copied_predicate = copy.deepcopy(predicate)
+    if copied_predicate[0] == '(' and copied_predicate[-1] == ')':
+        while len(copied_predicate) > 2 and \
+            copied_predicate[0] == '(' and copied_predicate[-1] == ')' \
+                and is_condition(copied_predicate[1:-1]):
+            copied_predicate = copied_predicate[1:-1]
+        copied_predicate = '(' + copied_predicate + ')'
+
+    return copied_predicate
+
 def strip_simple_cond_list(simple_cond_list):
-    return [map(lambda elem: elem.strip, simple_cond_list)]
+    copy_of_simple_list =copy.deepcopy(simple_cond_list)
+    map(lambda elem: elem.strip, copy_of_simple_list)
+    return copy_of_simple_list
 
 
 def get_stripped_condition(cond_str):
     # under the assumption the input is valid (a valid condition)
     stripped_cond = ""
-    if is_condition(cond_str):
-        stripped_cond += cond_str
-    elif is_condition(cond_str[1:-1]):
+    '''under the assumption the conditions are stripped'''''
+    cond_str = removeAllOuterParenthesis(cond_str)
+    if is_condition(cond_str[1:-1]):
         stripped_cond += cond_str[1:-1]
-    # no other case - checking if there are parenthesis or not
+    else:
+        stripped_cond += cond_str
+       # no other case - checking if there are parenthesis or not
     return stripped_cond.strip()
 
 
@@ -508,11 +531,12 @@ def apply_rule_11b(expression_list):
     lqp_state.append("11b")
     for i in range(0, len(expression_list) - 1):
         if isinstance(expression_list[i], Sigma) and isinstance(expression_list[i + 1], Cartesian):
-            if is_condition(expression_list[i].predicate):
-                cond_to_parse += expression_list[i].predicate
-            elif not is_condition(expression_list[i].predicate) and is_condition(expression_list[i].predicate[1:-1]):
+            if expression_list[i].predicate[0] == "(" and expression_list[i].predicate[-1] == ")" and is_condition(expression_list[i].predicate):
                 cond_to_parse += expression_list[i].predicate[1:-1]
-            if is_11b_need_to_be_appllied(cond_to_parse):
+            else:
+                cond_to_parse += expression_list[i].predicate
+
+            if is_11b_need_to_be_applied(cond_to_parse):
                 new_njoin = Njoin()
                 new_exp_list.insert(i, new_njoin)
                 new_exp_list.pop(i + 1)
@@ -573,7 +597,6 @@ def create_expression_list():
         attribute_list_str = select_str
 
     table_list_str = query_str[from_idx + 4: where_idx].strip()
-
     if query_str[-1] == ";":
         condition_str = query_str[where_idx + 5:-1].strip()
     else:
@@ -605,8 +628,8 @@ def get_partitioned_and_index_aux(cond_str):
     if is_simple_cond(cond_str):
         return -1
     elif cond_str[0] == "(" and cond_str[-1] == ")" and is_condition(cond_str[1:-1]):
-        return get_partitioned_and_index(cond_str[1:-1])
-    elif cond_str.count("AND"):
+        return -1
+    elif cond_str.count("AND") > 0:
         return get_partitioned_and_index(cond_str)
     else:
         return -1
