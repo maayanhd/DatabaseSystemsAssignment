@@ -2,13 +2,6 @@ import copy
 import random
 import math
 
-''' 
-1.Fix spaces in printing - need to be checked
-2.Duplicates in global list - not yet
-3. Debugging rule 4 part 2 - partly
-5. Create queries for part 2- partly
-'''
-
 rules_menu = {'1': "4", '2': "4a", '3': "5a", '4': "6", '5': "6a", '6': '11b'}
 num_to_opt_rules_menu = {1: "4", 2: "4a", 3: "5a", 4: "6", 5: "6a", 6: "11b"}
 list_of_expressions_lists = []
@@ -47,9 +40,10 @@ def estimate_query_plans():
     list_of_expressions = optimize_query("Part 2", expression_list)
 
     for exp in list_of_expressions:
-        print("Size estimation of: ", end="")
+        print("\n")
+        print("Size estimation of: ", end="\n")
         print_expression_list(exp)
-        print("")
+        print("\n")
         exp_list = copy.deepcopy(exp)
         exp_list.reverse()
         estimate_query_plan(exp_list)
@@ -123,12 +117,12 @@ def estimate_cartesian(schema_1, schema_2):
 def apply_rule_4(expression_list):
     lqp_state.append("4")
     ind_of_pair = None
-
+    new_exp_list = copy.deepcopy(expression_list)
     for ind, op in enumerate(expression_list):
         if isinstance(op, Sigma):
             partitioned_and_index = get_partitioned_and_index_aux(op.predicate)
             if partitioned_and_index != -1:
-                expression_list = update_expression_rule_4(partitioned_and_index, ind, expression_list)
+                new_exp_list = update_expression_rule_4(partitioned_and_index, ind, new_exp_list)
                 break
         if isinstance(op, Pair):
             ind_of_pair = ind
@@ -136,12 +130,12 @@ def apply_rule_4(expression_list):
     if ind_of_pair:
         left_list = apply_rule_4(expression_list[ind_of_pair].left_lst)
         if left_list == expression_list[ind_of_pair].left_lst:
-            expression_list[ind_of_pair].right_lst = apply_rule_4(expression_list[ind_of_pair].right_lst)
+            new_exp_list[ind_of_pair].right_lst = apply_rule_4(expression_list[ind_of_pair].right_lst)
         else:
-            expression_list[ind_of_pair].left_lst = left_list
+            new_exp_list[ind_of_pair].left_lst = left_list
 
     lqp_state.clear()
-    return expression_list
+    return new_exp_list
 
 
 def update_expression_rule_4(and_str_index, sigma_list_index, expression_list):
@@ -153,6 +147,16 @@ def update_expression_rule_4(and_str_index, sigma_list_index, expression_list):
 
     return new_exp_list
 
+def remove_unnecessary_parenthesis_in_sigma_list(sigma_list):
+
+    temp_list = copy.deepcopy(sigma_list)
+    for i,sigma in enumerate(sigma_list):
+        predicate = removeAllOuterParenthesis(sigma.predicate).strip()
+        if predicate[0] == "(" and predicate[-1] == ")" and is_condition(predicate[1:-1]):
+            temp_list[i].predicate = predicate[1:-1]
+
+
+    return temp_list
 
 def estimate_sigma(sigma_op, processed_schema):
     print(sigma_op.__str__())
@@ -160,12 +164,14 @@ def estimate_sigma(sigma_op, processed_schema):
     sigma_list = [sigma_op]
     simple_cond_prob = 1.0
     sigma_list_length = len(sigma_list)
-    new_sigma_list = apply_rule_4(sigma_list)
+    new_sigma_list = remove_unnecessary_parenthesis_in_sigma_list(sigma_list)
+    new_sigma_list = apply_rule_4(new_sigma_list)
 
     while sigma_list_length < len(new_sigma_list):
         '''while rule 4 applied - meaning '''
         sigma_list = new_sigma_list
-        new_sigma_list = apply_rule_4(sigma_list)
+        new_sigma_list = remove_unnecessary_parenthesis_in_sigma_list(sigma_list)
+        new_sigma_list = apply_rule_4(new_sigma_list)
         sigma_list_length = len(sigma_list)
     '''at this point sigma list contains only sigma instances with simple condition '''
 
@@ -187,22 +193,33 @@ def estimate_njoin(schema_1, schema_2):
     print("input: " + schema_1.get_estimation_stat_str() + " " + schema_2.get_estimation_stat_str())
 
     new_att_list = copy.deepcopy(schema_1.att_list)
+    new_att_list.extend(copy.deepcopy(schema_2.att_list))
     new_att_to_v = copy.deepcopy(schema_1.att_to_v)
+    new_att_to_v.update(copy.deepcopy(schema_2.att_to_v))
     new_att_to_size = copy.deepcopy(schema_1.att_to_size)
+    new_att_to_size.update(copy.deepcopy(schema_2.att_to_size))
 
-    for att in schema_2.att_list:
-
-        if not is_att_in_list(att, schema_1.att_list):
-            new_att_list.append(att)
-            new_att_to_v[att] = schema_2.att_to_v[att]
-            new_att_to_size[att] = schema_2.att_to_size[att]
-
+    njoin_predicate_probability = estimate_njoin_probability(schema_1, schema_2)
     res_schema = Schema("Scheme" + str(schema_1.name_counter + schema_2.name_counter + 1), \
-                        schema_1.n_rows * schema_2.n_rows, new_att_list, \
+                        math.ceil(schema_1.n_rows * schema_2.n_rows * njoin_predicate_probability), new_att_list, \
                         new_att_to_v, new_att_to_size, schema_1.name_counter + schema_2.name_counter + 1)
 
     print("output: " + res_schema.get_estimation_stat_str() + "\n")
     return res_schema
+
+def estimate_njoin_probability(schema_1,schema_2):
+
+    res_prob = 1
+    col_to_att= {}
+    for att in schema_1.att_list:
+        col_to_att[att.split(".")[1]] = att
+
+    for att in schema_2.att_list:
+        col_name = att.split(".")[1]
+        if col_name in col_to_att:
+            res_prob *=  max(1/schema_1.att_to_v[col_to_att[col_name]],1/schema_2.att_to_v[att])
+
+    return res_prob
 
 
 def get_probability_by_condition(curr_sigma_predicate, att_to_v):
@@ -212,7 +229,7 @@ def get_probability_by_condition(curr_sigma_predicate, att_to_v):
         copied_predicate = removeAllOuterParenthesis(copied_predicate)
         copied_predicate = copied_predicate[1:-1]
 
-    parsed_simple_condition = copied_predicate.split("=")
+    parsed_simple_condition = strip_simple_cond_list(copied_predicate.split("="))
     cond_probability = 0.0
     if parsed_simple_condition[0] == parsed_simple_condition[1]:
         cond_probability = 1.0
@@ -252,7 +269,7 @@ def adjust_expression_list_by_file(expression_list):
         info_line = buffer_of_stat_file.readline()[:-1]
         """reading without '\n' and  parenthesis"""
         info_line = info_line[2:-1]
-        type_list = info_line.split(",")
+        type_list = strip_simple_cond_list(info_line.split(","))
         att_list = []
         att_to_type = {}
         for att in type_list:
@@ -264,13 +281,13 @@ def adjust_expression_list_by_file(expression_list):
         new_exp_list[-1].get_i_elem_in_pair(i)[0].att_to_size = copy.deepcopy(att_to_size)
 
         info_line = buffer_of_stat_file.readline()[:-1]
-        new_exp_list[-1].get_i_elem_in_pair(i)[0].n_rows = int(info_line.split("=")[1])
+        new_exp_list[-1].get_i_elem_in_pair(i)[0].n_rows = int(info_line.split("=")[1].strip())
         new_exp_list[-1].get_i_elem_in_pair(i)[0].n_width = len(att_list)
 
         att_to_v = {}
         for att in att_list:
             info_line = buffer_of_stat_file.readline()[:-1]
-            att_to_v[att] = int(info_line.split("=")[1])
+            att_to_v[att] = int(info_line.split("=")[1].strip())
 
         new_exp_list[-1].get_i_elem_in_pair(i)[0].att_to_v = copy.deepcopy(att_to_v)
         info_line = buffer_of_stat_file.readline()[:-1]
@@ -302,12 +319,10 @@ def optimize_query(mode, expression_list):
             print("\n\n", end="")
             for itr in range(0, 10):
                 print(f"Iteration {itr + 1} out of 10:")
-                # optimization_rule = num_to_opt_rules_menu[random.randint(3, 6)]
                 list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i],
                                                                          num_to_opt_rules_menu[
                                                                              random.choice([1, 2, 3, 4, 5, 6])])
-                # optimization_rule.strip())
-                # '''list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i], '4')'''
+
             print(f"just finished optimizing logical query plan {i + 1}\n")
 
         '''Printing Optimized Expressions'''
@@ -328,7 +343,10 @@ def optimize_expr_by_opt_rule(expression_list, optimization_rule):
         print_expression_list(optimized_expression_list)
         print("\n\n", end="")
     elif optimization_rule == '4a':
+        print("Applying optimization rule 4a ...")
         optimized_expression_list = apply_rule_4a(expression_list)
+        print_expression_list(optimized_expression_list)
+        print("\n\n", end="")
     elif optimization_rule == '5a':
         optimized_expression_list = apply_rule_5a(expression_list)
     elif optimization_rule == '6':
@@ -343,16 +361,25 @@ def optimize_expr_by_opt_rule(expression_list, optimization_rule):
 
 def apply_rule_4a(expression_list):
     new_exp_list = copy.deepcopy(expression_list)
-    print("Applying optimization rule 4a ...")
     lqp_state.append("4a")
+    ind_of_pair = None
+
     for i in range(0, len(expression_list) - 1):
         if isinstance(expression_list[i], Sigma) and isinstance(expression_list[i + 1], Sigma):
             new_exp_list[i + 1].predicate = expression_list[i].predicate
             new_exp_list[i].predicate = expression_list[i + 1].predicate
             break
 
-    print_expression_list(new_exp_list)
-    print("\n\n", end="")
+        if isinstance(expression_list[i + 1], Pair):
+            ind_of_pair = i+1
+
+    if ind_of_pair:
+        left_list = apply_rule_4a(expression_list[ind_of_pair].left_lst)
+        if left_list == expression_list[ind_of_pair].left_lst:
+            new_exp_list[ind_of_pair].right_lst = apply_rule_4a(expression_list[ind_of_pair].right_lst)
+        else:
+            new_exp_list[ind_of_pair].left_lst = left_list
+
     lqp_state.clear()
     return new_exp_list
 
@@ -382,8 +409,6 @@ def parse_predicate_to_att_list(predicate):
 
 
 def is_a_contained_in_b(a_list, b_list):
-    print(a_list)
-    print(b_list)
 
     for elem in a_list:
         if elem not in b_list:
@@ -504,8 +529,9 @@ def removeAllOuterParenthesis(predicate):
 
 def strip_simple_cond_list(simple_cond_list):
     copy_of_simple_list = copy.deepcopy(simple_cond_list)
-    map(lambda elem: elem.strip, copy_of_simple_list)
-    return copy_of_simple_list
+    map_result = map(lambda elem : elem.strip(), copy_of_simple_list)
+
+    return  list(map_result)
 
 
 def get_stripped_condition(cond_str):
@@ -533,10 +559,8 @@ def apply_rule_11b(expression_list):
                     and is_condition(copied_predicate[1:-1]):
                 copied_predicate = removeAllOuterParenthesis(copied_predicate)
                 cond_to_parse += copied_predicate[1:-1]
-                'expression_list[i].predicate[1:-1]'
             else:
                 cond_to_parse += copied_predicate
-                'expression_list[i].predicate'
 
             if is_11b_need_to_be_applied(cond_to_parse):
                 new_njoin = Njoin()
@@ -841,7 +865,7 @@ class Schema:
         self.n_rows = n_rows
         self.n_width = len(att_list)
         self.att_to_v = att_to_v
-        self.att_list = att_list
+        self.att_list = strip_simple_cond_list(att_list)
         self.att_to_size = att_to_size
         self.size_of_row = self.calc_row_size()
         self.name_counter = name_counter
