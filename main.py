@@ -31,23 +31,23 @@ def tester_menu():
     while not is_option_valid:
         if option_num == '1' or option_num == '2':
             expression_list = create_expression_list()
-            optimize_query(menu[option_num],expression_list)
+            optimize_query(menu[option_num], expression_list)
             is_option_valid = True
         elif option_num == '3':
             estimate_query_plans()
             is_option_valid = True
         else:
             print("illegal option, must an existing option number, please try again!")
+            option_num = input()
             is_option_valid = False
 
 
 def estimate_query_plans():
-
     expression_list = adjust_expression_list_by_file(create_expression_list())
     list_of_expressions = optimize_query("Part 2", expression_list)
 
     for exp in list_of_expressions:
-        print("Size estimation of: ", end ="")
+        print("Size estimation of: ", end="")
         print_expression_list(exp)
         print("")
         exp_list = copy.deepcopy(exp)
@@ -56,22 +56,21 @@ def estimate_query_plans():
 
 
 def estimate_query_plan(reversed_exp_list):
-
     """ in order to avoid compilation errors, creating temp initial Schemas, that will be initialized first by design (design by contract) """
 
     left_schema_res = Schema("initial")
     right_schema_res = Schema("initial")
     res_schema = Schema("initial")
 
-    for i,elem in enumerate(reversed_exp_list):
-        if isinstance(elem,Pi):
+    for i, elem in enumerate(reversed_exp_list):
+        if isinstance(elem, Pi):
             res_schema.__copy__(estimate_pi(elem, res_schema))
-        elif isinstance(elem,Sigma):
+        elif isinstance(elem, Sigma):
             res_schema.__copy__(estimate_sigma(elem, res_schema))
-        elif isinstance(elem,Cartesian):
-            res_schema.__copy__(estimate_cartesian(left_schema_res,right_schema_res))
-        elif isinstance(elem,Njoin):
-            res_schema.__copy__(estimate_njoin(left_schema_res,right_schema_res))
+        elif isinstance(elem, Cartesian):
+            res_schema.__copy__(estimate_cartesian(left_schema_res, right_schema_res))
+        elif isinstance(elem, Njoin):
+            res_schema.__copy__(estimate_njoin(left_schema_res, right_schema_res))
         elif isinstance(elem, Pair):
             reversed_exp_list[i].left_lst.reverse()
             reversed_exp_list[i].right_lst.reverse()
@@ -84,7 +83,6 @@ def estimate_query_plan(reversed_exp_list):
 
 
 def estimate_pi(pi_operator, processed_schema):
-
     print(pi_operator.__str__())
     print("input: " + processed_schema.get_estimation_stat_str())
 
@@ -94,15 +92,15 @@ def estimate_pi(pi_operator, processed_schema):
         res_att_to_v[att] = processed_schema.att_to_v[att]
         res_att_to_size[att] = processed_schema.att_to_size[att]
 
-    res_schema = Schema("Scheme" + str(processed_schema.name_counter + 1), processed_schema.n_rows,\
-                        pi_operator.att_list,res_att_to_v,res_att_to_size, processed_schema.name_counter + 1)
+    res_schema = Schema("Scheme" + str(processed_schema.name_counter + 1), processed_schema.n_rows, \
+                        pi_operator.att_list, res_att_to_v, res_att_to_size, processed_schema.name_counter + 1)
 
-    print("output: " + res_schema.get_estimation_stat_str()+ "\n")
+    print("output: " + res_schema.get_estimation_stat_str() + "\n")
 
     return res_schema
 
-def estimate_cartesian(schema_1,schema_2):
 
+def estimate_cartesian(schema_1, schema_2):
     print("CARTESIAN")
     print("input: " + schema_1.get_estimation_stat_str() + " " + schema_2.get_estimation_stat_str())
 
@@ -113,11 +111,11 @@ def estimate_cartesian(schema_1,schema_2):
     new_att_to_size = copy.deepcopy(schema_1.att_to_size)
     new_att_to_size.update(copy.deepcopy(schema_2.att_to_size))
 
-    res_schema = Schema("Scheme" + str(schema_1.name_counter + schema_2.name_counter + 1),\
-                        schema_1.n_rows * schema_2.n_rows,new_att_list,\
-                        new_att_to_v,new_att_to_size,schema_1.name_counter + schema_2.name_counter + 1)
+    res_schema = Schema("Scheme" + str(schema_1.name_counter + schema_2.name_counter + 1), \
+                        schema_1.n_rows * schema_2.n_rows, new_att_list, \
+                        new_att_to_v, new_att_to_size, schema_1.name_counter + schema_2.name_counter + 1)
 
-    print("output: " + res_schema.get_estimation_stat_str()+ "\n")
+    print("output: " + res_schema.get_estimation_stat_str() + "\n")
 
     return res_schema
 
@@ -137,7 +135,6 @@ def apply_rule_4(expression_list):
 
     if ind_of_pair:
         left_list = apply_rule_4(expression_list[ind_of_pair].left_lst)
-        ''' rule 4 still need to be applied'''
         if left_list == expression_list[ind_of_pair].left_lst:
             expression_list[ind_of_pair].right_lst = apply_rule_4(expression_list[ind_of_pair].right_lst)
         else:
@@ -148,7 +145,6 @@ def apply_rule_4(expression_list):
 
 
 def update_expression_rule_4(and_str_index, sigma_list_index, expression_list):
-
     new_exp_list = copy.deepcopy(expression_list)
     predicate = expression_list[sigma_list_index].predicate
     left_sigma = Sigma(predicate[:and_str_index].strip())
@@ -159,7 +155,6 @@ def update_expression_rule_4(and_str_index, sigma_list_index, expression_list):
 
 
 def estimate_sigma(sigma_op, processed_schema):
-
     print(sigma_op.__str__())
     print("input: " + processed_schema.get_estimation_stat_str())
     sigma_list = [sigma_op]
@@ -177,18 +172,17 @@ def estimate_sigma(sigma_op, processed_schema):
     for sigma in new_sigma_list:
         simple_cond_prob *= get_probability_by_condition(sigma.predicate, processed_schema.att_to_v)
 
-
-    res_schema = Schema("Scheme" + str(processed_schema.name_counter + 1), math.ceil(simple_cond_prob * processed_schema.n_rows),\
-                        processed_schema.att_list, processed_schema.att_to_v,\
-                        processed_schema.att_to_size,processed_schema.name_counter + 1)
+    res_schema = Schema("Scheme" + str(processed_schema.name_counter + 1),
+                        math.ceil(simple_cond_prob * processed_schema.n_rows), \
+                        processed_schema.att_list, processed_schema.att_to_v, \
+                        processed_schema.att_to_size, processed_schema.name_counter + 1)
 
     print("output: " + res_schema.get_estimation_stat_str() + "\n")
 
     return res_schema
 
 
-def estimate_njoin(schema_1,schema_2):
-
+def estimate_njoin(schema_1, schema_2):
     print("NJOIN")
     print("input: " + schema_1.get_estimation_stat_str() + " " + schema_2.get_estimation_stat_str())
 
@@ -203,16 +197,22 @@ def estimate_njoin(schema_1,schema_2):
             new_att_to_v[att] = schema_2.att_to_v[att]
             new_att_to_size[att] = schema_2.att_to_size[att]
 
-    res_schema = Schema("Scheme" + str(schema_1.name_counter + schema_2.name_counter + 1),\
-                        schema_1.n_rows * schema_2.n_rows, new_att_list,\
-                        new_att_to_v, new_att_to_size,schema_1.name_counter + schema_2.name_counter + 1)
+    res_schema = Schema("Scheme" + str(schema_1.name_counter + schema_2.name_counter + 1), \
+                        schema_1.n_rows * schema_2.n_rows, new_att_list, \
+                        new_att_to_v, new_att_to_size, schema_1.name_counter + schema_2.name_counter + 1)
 
     print("output: " + res_schema.get_estimation_stat_str() + "\n")
     return res_schema
 
+
 def get_probability_by_condition(curr_sigma_predicate, att_to_v):
     """under the assumption only "=" and simple conditions- design by contract and by given clarifications"""
-    parsed_simple_condition = curr_sigma_predicate.split("=")
+    copied_predicate = copy.deepcopy(curr_sigma_predicate)
+    if copied_predicate[0] == '(' and copied_predicate[-1] == ')' and is_simple_cond(copied_predicate[1:-1]):
+        copied_predicate = removeAllOuterParenthesis(copied_predicate)
+        copied_predicate = copied_predicate[1:-1]
+
+    parsed_simple_condition = copied_predicate.split("=")
     cond_probability = 0.0
     if parsed_simple_condition[0] == parsed_simple_condition[1]:
         cond_probability = 1.0
@@ -233,8 +233,7 @@ def get_probability_by_condition(curr_sigma_predicate, att_to_v):
     return cond_probability
 
 
-def is_att_in_list(att,att_list):
-
+def is_att_in_list(att, att_list):
     for elem in att_list:
         if att[-1] == elem[-1]:
             return True
@@ -243,7 +242,6 @@ def is_att_in_list(att,att_list):
 
 
 def adjust_expression_list_by_file(expression_list):
-
     buffer_of_stat_file = open("statistics.txt", "r")
     new_exp_list = copy.deepcopy(expression_list)
 
@@ -291,7 +289,6 @@ def estimate_att_size_list(att_to_type):
 
 
 def optimize_query(mode, expression_list):
-
     if mode == "Part 1":
         optimization_rule = get_optimization_rule()
         optimized_exp_list = optimize_expr_by_opt_rule(expression_list.copy(), optimization_rule.strip())
@@ -308,7 +305,7 @@ def optimize_query(mode, expression_list):
                 # optimization_rule = num_to_opt_rules_menu[random.randint(3, 6)]
                 list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i],
                                                                          num_to_opt_rules_menu[
-                                                                             random.choice([6])])
+                                                                             random.choice([1, 2, 3, 4, 5, 6])])
                 # optimization_rule.strip())
                 # '''list_of_expressions_lists[i] = optimize_expr_by_opt_rule(list_of_expressions_lists[i], '4')'''
             print(f"just finished optimizing logical query plan {i + 1}\n")
@@ -342,7 +339,6 @@ def optimize_expr_by_opt_rule(expression_list, optimization_rule):
         optimized_expression_list = apply_rule_11b(expression_list)
 
     return optimized_expression_list
-
 
 
 def apply_rule_4a(expression_list):
@@ -473,7 +469,6 @@ def is_njoin_predicate(first_simple_cond_lst, second_simple_cond_lst):
 def is_11b_need_to_be_applied(cond_to_parse):
     is_applying_needed = False
     cond_to_parse = removeAllOuterParenthesis(cond_to_parse)
-    get_partitioned_and_index_aux("AND")
     parsed_cond = cond_to_parse.split("AND")
     first_simple_cond_list = []
     second_simple_cond_list = []
@@ -492,21 +487,23 @@ def is_11b_need_to_be_applied(cond_to_parse):
     return is_applying_needed
 
 
-'''using only in case the content of the parenthesis is a valid condition/simple condition/'''
 def removeAllOuterParenthesis(predicate):
+    """using only in case the content of the parenthesis is a valid condition - simplifying multiple parenthesis
+    cases """
     content_condition = False
     copied_predicate = copy.deepcopy(predicate)
-    if copied_predicate[0] == '(' and copied_predicate[-1] == ')':
+    if copied_predicate[0] == '(' and copied_predicate[-1] == ')' and is_condition(copied_predicate[1:-1]):
         while len(copied_predicate) > 2 and \
-            copied_predicate[0] == '(' and copied_predicate[-1] == ')' \
+                copied_predicate[0] == '(' and copied_predicate[-1] == ')' \
                 and is_condition(copied_predicate[1:-1]):
             copied_predicate = copied_predicate[1:-1]
         copied_predicate = '(' + copied_predicate + ')'
 
     return copied_predicate
 
+
 def strip_simple_cond_list(simple_cond_list):
-    copy_of_simple_list =copy.deepcopy(simple_cond_list)
+    copy_of_simple_list = copy.deepcopy(simple_cond_list)
     map(lambda elem: elem.strip, copy_of_simple_list)
     return copy_of_simple_list
 
@@ -520,7 +517,7 @@ def get_stripped_condition(cond_str):
         stripped_cond += cond_str[1:-1]
     else:
         stripped_cond += cond_str
-       # no other case - checking if there are parenthesis or not
+    # no other case - checking if there are parenthesis or not
     return stripped_cond.strip()
 
 
@@ -531,10 +528,15 @@ def apply_rule_11b(expression_list):
     lqp_state.append("11b")
     for i in range(0, len(expression_list) - 1):
         if isinstance(expression_list[i], Sigma) and isinstance(expression_list[i + 1], Cartesian):
-            if expression_list[i].predicate[0] == "(" and expression_list[i].predicate[-1] == ")" and is_condition(expression_list[i].predicate):
-                cond_to_parse += expression_list[i].predicate[1:-1]
+            copied_predicate = copy.deepcopy(expression_list[i].predicate)
+            if copied_predicate[0] == "(" and copied_predicate[-1] == ")" \
+                    and is_condition(copied_predicate[1:-1]):
+                copied_predicate = removeAllOuterParenthesis(copied_predicate)
+                cond_to_parse += copied_predicate[1:-1]
+                'expression_list[i].predicate[1:-1]'
             else:
-                cond_to_parse += expression_list[i].predicate
+                cond_to_parse += copied_predicate
+                'expression_list[i].predicate'
 
             if is_11b_need_to_be_applied(cond_to_parse):
                 new_njoin = Njoin()
@@ -834,7 +836,7 @@ class Njoin:
 
 class Schema:
 
-    def __init__(self, name, n_rows=0, att_list =[], att_to_v = [], att_to_size = [], name_counter = 0):
+    def __init__(self, name, n_rows=0, att_list=[], att_to_v=[], att_to_size=[], name_counter=0):
         self.name = name.strip()
         self.n_rows = n_rows
         self.n_width = len(att_list)
@@ -843,7 +845,6 @@ class Schema:
         self.att_to_size = att_to_size
         self.size_of_row = self.calc_row_size()
         self.name_counter = name_counter
-
 
     def __copy__(self, other):
 
@@ -859,7 +860,6 @@ class Schema:
     def get_estimation_stat_str(self):
 
         return f"n_{self.name}=" + str(self.n_rows) + f" R_{self.name}=" + str(self.size_of_row)
-
 
     def calc_row_size(self):
         row_size = 0
@@ -884,9 +884,9 @@ class Pair:
         self.right_lst = right_list
 
     def get_i_elem_in_pair(self, i):
-        if i==0:
+        if i == 0:
             return self.left_lst
-        elif i==1:
+        elif i == 1:
             return self.right_lst
         else:
             return None
